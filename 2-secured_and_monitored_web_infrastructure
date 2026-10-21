@@ -1,0 +1,56 @@
+Diagram: <INSERT YOUR IMGUR/SCREENSHOT LINK HERE>
+
+# 2. Secured and monitored web infrastructure
+
+## Infrastructure
+
+Three servers hosting `www.foobar.com`, secured, serving encrypted traffic, and monitored:
+
+- **1 load balancer** (HAProxy) with the **SSL certificate** for `www.foobar.com` installed (HTTPS)
+- **Server 1** and **Server 2**, each containing:
+  - 1 web server (Nginx)
+  - 1 application server
+  - 1 set of application files (the code base)
+  - 1 database (MySQL): Primary on Server 1, Replica on Server 2
+- **3 firewalls**, one in front of each server (the load balancer, Server 1 and Server 2)
+- **3 monitoring clients** (data collectors, for example Sumo Logic), one installed on each server, sending data to the external monitoring service
+
+## Why each additional element is added
+
+- **Firewalls (3):** to control which traffic can reach each server. Each firewall only allows the ports that are needed (for example 80/443 on the load balancer, and only traffic coming from the load balancer on the web servers), and blocks everything else.
+- **SSL certificate:** to serve `www.foobar.com` over HTTPS, so the traffic between the user and the website is encrypted and the user can verify the site's identity.
+- **Monitoring clients (3):** to collect logs and metrics from each server and send them to the monitoring service, so the health and performance of the whole infrastructure can be observed and alerts can be raised.
+
+## Specifics
+
+**What are firewalls for?**
+A firewall is a network security system that filters incoming and outgoing traffic based on rules (ports, protocols, IP addresses). It protects the servers by blocking unauthorized or malicious connections and reducing the attack surface.
+
+**Why is the traffic served over HTTPS?**
+HTTPS (HTTP over TLS/SSL) encrypts the data between the user's browser and the server. It provides:
+- **Confidentiality:** nobody on the network can read the data (passwords, personal data).
+- **Integrity:** the data cannot be modified in transit without being detected.
+- **Authentication:** the certificate proves the user is talking to the real `www.foobar.com`.
+
+**What is monitoring used for?**
+Monitoring is used to track the health, performance and availability of the infrastructure (CPU, memory, disk, response times, errors, traffic). It allows detecting problems early, sending alerts, investigating incidents through logs, and planning capacity.
+
+**How is the monitoring tool collecting data?**
+A monitoring client (agent or collector) is installed on each server. It reads logs (for example Nginx access/error logs, MySQL logs, system logs) and system and application metrics, and sends them regularly to the monitoring service (for example Sumo Logic), where they are stored, searched, graphed and used for alerts.
+
+**What to do to monitor the web server QPS?**
+QPS (Queries Per Second) is the number of requests the web server handles each second. To monitor it:
+1. Make sure the monitoring client collects the Nginx access log (each line is one request), or enable Nginx's `stub_status` module to expose the total request counter.
+2. In the monitoring tool, build a query that counts requests per second (or per minute, divided by 60) for each web server and for the whole infrastructure.
+3. Display it on a dashboard and set an alert if QPS goes above a defined threshold or suddenly drops.
+
+## Issues with this infrastructure
+
+**Why terminating SSL at the load balancer level is an issue**
+After the load balancer, the traffic is decrypted and travels in plain HTTP between the load balancer and the web servers. Anyone with access to the internal network could read or alter it. The load balancer is also a SPOF that holds the certificate and private key, and the decryption adds load on it. To avoid this, traffic can be re-encrypted to the backend servers (SSL passthrough or end-to-end encryption).
+
+**Why having only one MySQL server capable of accepting writes is an issue**
+The Primary node is the only one that accepts writes, so it is a SPOF for write operations: if it fails, the application cannot write data until a Replica is promoted. It is also a bottleneck, because all writes go through a single machine, which limits scalability for write-heavy traffic.
+
+**Why having servers with all the same components (database, web server and application server) might be a problem**
+Every server runs the web server, the application server and the database together, so they compete for the same CPU, memory and disk. A problem in one component (for example a heavy database query) can slow down or crash the others. It is also impossible to scale a single component independently: to add more web capacity you must add a whole server including a database that may not be needed. Maintenance, tuning and security hardening are harder as well, since each component has different needs.
