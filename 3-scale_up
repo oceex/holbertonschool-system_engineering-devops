@@ -1,0 +1,21 @@
+Diagram: <INSERT YOUR IMGUR/SCREENSHOT LINK HERE>
+
+# 3. Scale up
+
+## Infrastructure
+
+Starting from the previous design (3 servers), this infrastructure adds **1 load balancer** and **1 server** and splits the components so that each one has its own server, for a total of 5 servers:
+
+- **2 load balancers** (HAProxy), configured as a **cluster**, so that they share a virtual IP address and one can take over from the other
+- **1 web server** (Nginx), on its own server
+- **1 application server** (with the application files, the code base), on its own server
+- **1 database server** (MySQL), on its own server
+
+The domain `www.foobar.com` points to the virtual IP address of the load balancer cluster. The firewalls, the SSL certificate and the monitoring clients from the previous design stay in place on each server.
+
+Request flow: user, then the load balancer cluster, then the web server (Nginx), then the application server, then the database.
+
+## Why each additional element is added
+
+- **Second load balancer (HAProxy cluster):** the single load balancer was a SPOF. With two load balancers in a cluster (for example one active and one passive, sharing a virtual IP with a tool like Keepalived), if the active one fails the other takes over automatically and the website stays reachable.
+- **Additional server and split of components (web, application, database):** each component gets its own server and its own resources, so they no longer compete for CPU, memory and disk. Each tier can be tuned, secured, maintained and scaled independently of the others (for example adding more application servers without touching the database). A problem in one component is also less likely to bring down the others.
